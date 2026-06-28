@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/dialog";
 import jsPDF from "jspdf";
 import { CustomerSelect } from "./CustomerSelect";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { KeyboardShortcutsHelp } from "@/components/ui/KeyboardShortcutsHelp";
 
 const QUICK_QTY = [0.25, 0.5, 0.75, 1];
 
@@ -136,14 +138,12 @@ export function BillingScreen() {
     setCustomer("Customer");
   };
 
-  // ✅ FIXED: Commit sale with proper data to Firebase
   const commitSale = async () => {
     if (committed || cart.length === 0) {
       console.log('⚠️ Sale already committed or cart empty');
       return;
     }
     
-    // Check stock
     for (const line of cart) {
       const item = findByCode(line.code);
       if (!item) {
@@ -185,11 +185,9 @@ export function BillingScreen() {
       
       console.log('💾 Committing sale to Firebase:', saleData);
       
-      // ✅ Save sale to Firebase
       await addSale(saleData);
       console.log('✅ Sale saved to Firebase');
       
-      // Update stock
       for (const l of cart) {
         await adjustStock(l.code, -l.qty);
         await addMovement({
@@ -345,6 +343,67 @@ table{width:100%;border-collapse:collapse}
     toast.success("PDF downloaded");
   };
 
+  // ✅ Keyboard Shortcuts
+  useKeyboardShortcuts({
+    onNewBill: () => {
+      if (cart.length === 0) return;
+      if (confirm("Clear current bill?")) {
+        clear();
+        toast.info("New bill started");
+      }
+    },
+    onPrint: () => {
+      if (cart.length === 0) {
+        toast.error("Cart is empty");
+        return;
+      }
+      doPrint();
+    },
+    onSave: () => {
+      if (cart.length === 0) {
+        toast.error("Cart is empty");
+        return;
+      }
+      doPrint();
+    },
+    onSearch: () => {
+      codeRef.current?.focus();
+    },
+    onClear: () => {
+      if (cart.length === 0) return;
+      if (confirm("Clear all items?")) {
+        clear();
+        toast.info("Cart cleared");
+      }
+    },
+    onFocusCode: () => {
+      codeRef.current?.focus();
+      codeRef.current?.select();
+    },
+    onFocusCustomer: () => {
+      const customerInput = document.querySelector('input[placeholder*="Customer"]') as HTMLInputElement;
+      if (customerInput) {
+        customerInput.focus();
+        customerInput.select();
+      }
+    },
+    onCancel: () => {
+      if (cart.length > 0) {
+        if (confirm("Clear current bill?")) {
+          clear();
+          toast.info("Cart cleared");
+        }
+      }
+    },
+    onPreview: () => {
+      if (cart.length === 0) {
+        toast.error("Cart is empty");
+        return;
+      }
+      openPreview();
+    },
+  });
+
   return (
     <div className="grid min-h-[calc(100vh-9rem)] grid-cols-1 gap-4 lg:h-[calc(100vh-9rem)] lg:grid-cols-[300px_1fr_340px] xl:grid-cols-[320px_1fr_380px]">
       <aside className="overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-card to-card/70 shadow-sm">
@@ -469,9 +528,12 @@ table{width:100%;border-collapse:collapse}
 
       <aside className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm lg:max-h-[calc(100vh-9rem)]">
         <div className="border-b border-border bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 px-4 py-3">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-gradient-tri">
-            Bill Summary
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-gradient-tri">
+              Bill Summary
+            </h2>
+            <KeyboardShortcutsHelp />
+          </div>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
             {invoice} {committed && <span className="ml-1 text-green-600">• saved</span>}
             {saving && <span className="ml-1 text-yellow-600">• saving...</span>}

@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { KeyboardShortcutsHelp } from "@/components/ui/KeyboardShortcutsHelp";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -80,6 +81,7 @@ function Index() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <KeyboardShortcutsHelp />
             <ShopSettingsDialog />
             <Button
               variant="outline"
