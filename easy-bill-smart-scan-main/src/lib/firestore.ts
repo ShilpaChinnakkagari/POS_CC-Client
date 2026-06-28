@@ -16,7 +16,33 @@ import {
 } from './firebase';
 
 export const FirestoreService = {
-  // ✅ Add with custom ID (uses code as document ID)
+  // ✅ FIXED: Add with better error handling
+  // In firestore.ts, find the add function and add this:
+
+async add(collectionName: string, data: any) {
+  try {
+    // ✅ Remove undefined values
+    const cleanData: any = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined && value !== null) {
+        cleanData[key] = value;
+      }
+    }
+    
+    console.log(`🔥 Adding to ${collectionName}:`, cleanData);
+    const docRef = await addDoc(collection(db, collectionName), {
+      ...cleanData,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    console.log(`✅ Added to ${collectionName} with ID:`, docRef.id);
+    return { id: docRef.id, ...cleanData };
+  } catch (error: any) {
+    console.error(`❌ Error adding to ${collectionName}:`, error);
+    throw error;
+  }
+},
+
   async addWithId(collectionName: string, id: string, data: any) {
     try {
       const docRef = doc(db, collectionName, id);
@@ -29,21 +55,6 @@ export const FirestoreService = {
       return { id, ...data };
     } catch (error) {
       console.error('Error adding document with ID:', error);
-      throw error;
-    }
-  },
-
-  // Regular add (auto-generated ID)
-  async add(collectionName: string, data: any) {
-    try {
-      const docRef = await addDoc(collection(db, collectionName), {
-        ...data,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
-      return { id: docRef.id, ...data };
-    } catch (error) {
-      console.error('Error adding document:', error);
       throw error;
     }
   },
@@ -114,14 +125,16 @@ export const FirestoreService = {
   },
 
   listen(collectionName: string, callback: (data: any[]) => void) {
+    console.log(`👂 Listening to ${collectionName}...`);
     const unsubscribe = onSnapshot(collection(db, collectionName), (snapshot) => {
       const data = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      console.log(`📡 ${collectionName} updated:`, data.length, 'documents');
       callback(data);
     }, (error) => {
-      console.error('Error listening to collection:', error);
+      console.error(`❌ Error listening to ${collectionName}:`, error);
     });
     return unsubscribe;
   },

@@ -1,5 +1,6 @@
+// src/components/billing/ReportsTab.tsx
 import { useMemo, useState } from "react";
-import { formatMoney, useExpenses, useSales, useStockMovements, useItems } from "@/lib/store";
+import { formatMoney, useExpenses, useItems, useStockMovements } from "@/lib/store";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -21,16 +22,52 @@ function ym(iso: string) { return iso.slice(0, 7); }
 
 export function ReportsTab() {
   const { items } = useItems();
-
-  const { sales } = useSales();
-  const { expenses } = useExpenses();
   const { movements } = useStockMovements();
+  const { expenses } = useExpenses();
+  
   const today = new Date().toISOString().slice(0, 10);
   const [day, setDay] = useState(today);
   const [month, setMonth] = useState(today.slice(0, 7));
 
+  // ✅ Calculate sales and profit from stock movements
+  const salesData = useMemo(() => {
+    // Get all "out" movements (sales)
+    const outMovements = movements.filter(m => m.type === "out");
+    
+    // Group by invoice
+    const invoiceMap = new Map();
+    outMovements.forEach(m => {
+      const invoice = m.note || m.id;
+      if (!invoiceMap.has(invoice)) {
+        invoiceMap.set(invoice, {
+          invoice: invoice,
+          date: m.date,
+          items: [],
+          total: 0,
+          profit: 0
+        });
+      }
+      const sale = invoiceMap.get(invoice);
+      // Find item details
+      const item = items.find(i => i.code === m.code);
+      const price = item?.price || 0;
+      const cost = item?.cost || 0;
+      const qty = m.qty || 0;
+      sale.items.push({ ...m, price, cost });
+      sale.total += price * qty;
+      sale.profit += (price - cost) * qty;
+    });
+    
+    return Array.from(invoiceMap.values());
+  }, [movements, items]);
+
+  // Calculate totals
+  const totalSales = salesData.reduce((s, x) => s + x.total, 0);
+  const totalProfit = salesData.reduce((s, x) => s + x.profit, 0);
+  const totalBills = salesData.length;
+
   // Day totals
-  const daySales = sales.filter((s) => ymd(s.date) === day);
+  const daySales = salesData.filter((s) => ymd(s.date) === day);
   const dayRevenue = daySales.reduce((s, x) => s + x.total, 0);
   const dayProfit = daySales.reduce((s, x) => s + x.profit, 0);
   const dayExpenses = expenses.filter((e) => ymd(e.date) === day);
@@ -38,7 +75,7 @@ export function ReportsTab() {
   const dayNet = dayProfit - dayExpTotal;
 
   // Month totals
-  const monthSales = sales.filter((s) => ym(s.date) === month);
+  const monthSales = salesData.filter((s) => ym(s.date) === month);
   const monthRevenue = monthSales.reduce((s, x) => s + x.total, 0);
   const monthProfit = monthSales.reduce((s, x) => s + x.profit, 0);
   const monthExpenses = expenses.filter((e) => ym(e.date) === month);
@@ -52,7 +89,7 @@ export function ReportsTab() {
   const stockOutQty = stockOut.reduce((s, m) => s + m.qty, 0);
   const stockInQty = stockIn.reduce((s, m) => s + m.qty, 0);
 
-  // Monthly bar chart data (last 12 months)
+  // Monthly chart data
   const chartData = useMemo(() => {
     const months: Record<string, { month: string; revenue: number; profit: number; expenses: number }> = {};
     const now = new Date();
@@ -64,7 +101,7 @@ export function ReportsTab() {
         revenue: 0, profit: 0, expenses: 0,
       };
     }
-    sales.forEach((s) => {
+    salesData.forEach((s) => {
       const k = ym(s.date);
       if (months[k]) { months[k].revenue += s.total; months[k].profit += s.profit; }
     });
@@ -73,7 +110,7 @@ export function ReportsTab() {
       if (months[k]) months[k].expenses += e.amount;
     });
     return Object.values(months);
-  }, [sales, expenses]);
+  }, [salesData, expenses]);
 
   return (
     <Tabs defaultValue="overview" className="space-y-4">
@@ -86,14 +123,13 @@ export function ReportsTab() {
         </TabsList>
         <Button
           onClick={() => {
-            exportFullReport({ items, sales, expenses, movements });
+            exportFullReport({ items, sales: salesData, expenses, movements });
             toast.success("Excel report downloaded");
           }}
         >
           <Download className="mr-1 h-4 w-4" /> Export Excel
         </Button>
       </div>
-
 
       <TabsContent value="overview" className="space-y-4">
         <div className="rounded-lg border border-border bg-card p-4">
@@ -116,10 +152,10 @@ export function ReportsTab() {
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Total Sales" value={formatMoney(sales.reduce((s,x)=>s+x.total,0))} />
-          <Stat label="Total Profit" value={formatMoney(sales.reduce((s,x)=>s+x.profit,0))} accent="text-green-600" />
-          <Stat label="Total Expenses" value={formatMoney(expenses.reduce((s,e)=>s+e.amount,0))} accent="text-red-600" />
-          <Stat label="Total Bills" value={sales.length.toString()} />
+          <Stat label="Total Sales" value={formatMoney(totalSales)} />
+          <Stat label="Total Profit" value={formatMoney(totalProfit)} accent="text-green-600" />
+          <Stat label="Total Expenses" value={formatMoney(expenses.reduce((s,e) => s+e.amount, 0))} accent="text-red-600" />
+          <Stat label="Total Bills" value={totalBills.toString()} />
         </div>
       </TabsContent>
 
@@ -215,8 +251,7 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
   );
 }
 
-
-function SalesTable({ sales }: { sales: ReturnType<typeof useSales>["sales"] }) {
+function SalesTable({ sales }: { sales: any[] }) {
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="border-b border-border bg-muted/30 px-4 py-2 text-sm font-semibold">
@@ -240,7 +275,7 @@ function SalesTable({ sales }: { sales: ReturnType<typeof useSales>["sales"] }) 
             <TableRow key={s.invoice}>
               <TableCell className="font-mono text-xs">{s.invoice}</TableCell>
               <TableCell className="text-xs">{new Date(s.date).toLocaleString()}</TableCell>
-              <TableCell className="text-right">{s.lines.length}</TableCell>
+              <TableCell className="text-right">{s.items?.length || 0}</TableCell>
               <TableCell className="text-right font-mono">{formatMoney(s.total)}</TableCell>
               <TableCell className="text-right font-mono text-green-600">{formatMoney(s.profit)}</TableCell>
             </TableRow>
@@ -251,7 +286,7 @@ function SalesTable({ sales }: { sales: ReturnType<typeof useSales>["sales"] }) 
   );
 }
 
-function ExpenseTable({ expenses }: { expenses: ReturnType<typeof useExpenses>["expenses"] }) {
+function ExpenseTable({ expenses }: { expenses: any[] }) {
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="border-b border-border bg-muted/30 px-4 py-2 text-sm font-semibold">

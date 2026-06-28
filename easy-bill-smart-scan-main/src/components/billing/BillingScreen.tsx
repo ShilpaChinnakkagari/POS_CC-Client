@@ -61,7 +61,6 @@ export function BillingScreen() {
 
   const previewItem = findByCode(code.trim());
 
-  // ✅ ADD CODE WITH STOCK CHECK
   const addCode = (rawCode?: string, rawQty?: string) => {
     const c = (rawCode ?? code).trim();
     if (!c) {
@@ -81,7 +80,6 @@ export function BillingScreen() {
       return;
     }
     
-    // ✅ STOCK CHECK - Check available stock
     const currentStock = item.stock || 0;
     const existingInCart = cart.find((l) => l.code === item.code);
     const currentCartQty = existingInCart ? existingInCart.qty : 0;
@@ -115,7 +113,6 @@ export function BillingScreen() {
       return;
     }
     
-    // ✅ Check stock when updating quantity
     const item = findByCode(c);
     if (item) {
       const currentStock = item.stock || 0;
@@ -137,11 +134,14 @@ export function BillingScreen() {
     setCustomer("Customer");
   };
 
-  // ✅ COMMIT SALE WITH STOCK CHECK
+  // ✅ FIXED: Commit sale with proper data
   const commitSale = () => {
-    if (committed || cart.length === 0) return;
+    if (committed || cart.length === 0) {
+      console.log('⚠️ Sale already committed or cart empty');
+      return;
+    }
     
-    // ✅ CHECK STOCK BEFORE COMMITTING
+    // Check stock
     for (const line of cart) {
       const item = findByCode(line.code);
       if (!item) {
@@ -156,12 +156,26 @@ export function BillingScreen() {
     }
     
     const date = new Date().toISOString();
-    addSale({
-      invoice, date, lines: cart, subtotal, discount, tax, total, profit,
+    
+    // ✅ Save sale with all data
+    const saleData = {
+      invoice,
+      date,
+      lines: cart,
+      subtotal,
+      discount,
+      tax,
+      total,
+      profit,
       customer: customer.trim() || "Customer",
       cashier: cashier.trim() || "Admin",
       saleType,
-    });
+    };
+    
+    console.log('💾 Committing sale:', saleData);
+    addSale(saleData);
+    
+    // Update stock
     cart.forEach((l) => {
       adjustStock(l.code, -l.qty);
       addMovement({
@@ -182,7 +196,6 @@ export function BillingScreen() {
     setShowReceipt(true);
   };
 
-  /** Print via hidden iframe */
   const doPrint = () => {
     commitSale();
     const node = document.getElementById("receipt-print");
@@ -236,7 +249,6 @@ table{width:100%;border-collapse:collapse}
     toast.success("Receipt HTML saved");
   };
 
-  /** Generate a clean text-based PDF */
   const onDownloadPDF = () => {
     if (cart.length === 0) return;
     commitSale();
@@ -534,7 +546,6 @@ table{width:100%;border-collapse:collapse}
           </Button>
         </div>
 
-        {/* Offscreen receipt */}
         <div aria-hidden className="pointer-events-none fixed left-[-10000px] top-0 opacity-0">
           {cart.length > 0 && (
             <Receipt shop={shop} cart={cart} invoiceNo={invoice} date={new Date()}

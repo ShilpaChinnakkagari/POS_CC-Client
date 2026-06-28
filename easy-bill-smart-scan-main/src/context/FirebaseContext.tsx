@@ -42,7 +42,6 @@ export const FirebaseProvider = ({ children }: { children: ReactNode }) => {
     taxPercent: 5 
   });
 
-  // Auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
@@ -51,7 +50,6 @@ export const FirebaseProvider = ({ children }: { children: ReactNode }) => {
     return unsubscribe;
   }, []);
 
-  // Load shop settings
   useEffect(() => {
     const loadShop = async () => {
       try {
@@ -66,15 +64,18 @@ export const FirebaseProvider = ({ children }: { children: ReactNode }) => {
     if (user) loadShop();
   }, [user]);
 
-  // Listen to collections when user is logged in
   useEffect(() => {
     if (!user) return;
 
+    console.log('🔥 Listening to collections...');
+
     const unsubItems = FirestoreService.listen('items', (data) => {
+      console.log('📦 Items updated:', data.length);
       setItems(data);
     });
 
     const unsubSales = FirestoreService.listen('sales', (data) => {
+      console.log('💰 Sales updated:', data.length);
       setSales(data);
     });
 
@@ -108,10 +109,8 @@ export const FirebaseProvider = ({ children }: { children: ReactNode }) => {
     return userCredential.user;
   };
 
-  // ✅ Use addWithId to store by code
   const addItem = async (data: any) => {
-    // Use code as document ID
-    return await FirestoreService.addWithId('items', data.code, data);
+    return await FirestoreService.add('items', data);
   };
 
   const updateItem = async (id: string, data: any) => {
@@ -122,8 +121,29 @@ export const FirebaseProvider = ({ children }: { children: ReactNode }) => {
     return await FirestoreService.delete('items', id);
   };
 
+  // ✅ FIXED: Remove undefined values before saving
   const addSale = async (data: any) => {
-    return await FirestoreService.add('sales', { ...data, userId: user?.uid });
+    console.log('📝 Saving sale to Firebase:', data);
+    
+    // ✅ Remove any undefined values
+    const cleanData: any = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined && value !== null) {
+        cleanData[key] = value;
+      }
+    }
+    
+    const saleData = { 
+      ...cleanData, 
+      userId: user?.uid || 'unknown',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    console.log('📝 Clean sale data:', saleData);
+    const result = await FirestoreService.add('sales', saleData);
+    console.log('✅ Sale saved successfully:', result);
+    return result;
   };
 
   const addExpense = async (data: any) => {
