@@ -5,6 +5,8 @@ import { Trash2 } from "lucide-react";
 import { AddItemDialog } from "./AddItemDialog";
 import { StockInDialog } from "./StockInDialog";
 import { ReturnDialog } from "./ReturnDialog";
+import { CashReconciliationDialog } from "./CashReconciliation";
+import { CustomerManagement } from "./CustomerManagement";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -31,14 +33,14 @@ export function ManageItems() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-xl font-semibold">Item Catalog</h2>
           <p className="text-sm text-muted-foreground">
             {items.length} items · Stocked, Sold and Balance update live.
           </p>
           {/* ✅ Stock Alert Summary */}
-          <div className="mt-1 flex gap-2 text-xs">
+          <div className="mt-1 flex gap-2 text-xs flex-wrap">
             {outOfStockCount > 0 && (
               <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-600 font-medium">
                 ⚠️ {outOfStockCount} Out of Stock
@@ -51,7 +53,9 @@ export function ManageItems() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <CashReconciliationDialog />
+          <CustomerManagement />
           <ReturnDialog />
           <StockInDialog />
           <AddItemDialog />

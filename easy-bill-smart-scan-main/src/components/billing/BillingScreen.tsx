@@ -20,6 +20,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import jsPDF from "jspdf";
+import { CustomerSelect } from "./CustomerSelect";
 
 const QUICK_QTY = [0.25, 0.5, 0.75, 1];
 
@@ -38,6 +39,7 @@ export function BillingScreen() {
   const [cashier, setCashier] = useState("Admin");
   const [saleType, setSaleType] = useState<SaleType>("Cash");
   const [discountInput, setDiscountInput] = useState("0");
+  const [saving, setSaving] = useState(false);
   const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { codeRef.current?.focus(); }, []);
@@ -134,12 +136,14 @@ export function BillingScreen() {
     setCustomer("Customer");
   };
 
-  const commitSale = () => {
+  // ✅ FIXED: Commit sale with proper data to Firebase
+  const commitSale = async () => {
     if (committed || cart.length === 0) {
       console.log('⚠️ Sale already committed or cart empty');
       return;
     }
     
+    // Check stock
     for (const line of cart) {
       const item = findByCode(line.code);
       if (!item) {
@@ -153,35 +157,62 @@ export function BillingScreen() {
       }
     }
     
-    const date = new Date().toISOString();
-    
-    const saleData = {
-      invoice,
-      date,
-      lines: cart,
-      subtotal,
-      discount,
-      tax,
-      total,
-      profit,
-      customer: customer.trim() || "Customer",
-      cashier: cashier.trim() || "Admin",
-      saleType,
-    };
-    
-    console.log('💾 Committing sale:', saleData);
-    addSale(saleData);
-    
-    cart.forEach((l) => {
-      adjustStock(l.code, -l.qty);
-      addMovement({
-        id: "MV-" + Date.now() + "-" + l.code,
-        date, code: l.code, name: l.name, unit: l.unit,
-        qty: l.qty, type: "out", note: invoice,
-      });
-    });
-    setCommitted(true);
-    toast.success(`Bill ${invoice} saved!`);
+    setSaving(true);
+    try {
+      const date = new Date().toISOString();
+      
+      const saleData = {
+        invoice,
+        date,
+        lines: cart.map(l => ({
+          code: l.code,
+          name: l.name,
+          unit: l.unit,
+          price: l.price,
+          qty: l.qty,
+          cost: l.cost || 0,
+          mrp: l.mrp || l.price,
+        })),
+        subtotal,
+        discount,
+        tax,
+        total,
+        profit,
+        customer: customer.trim() || "Customer",
+        cashier: cashier.trim() || "Admin",
+        saleType,
+      };
+      
+      console.log('💾 Committing sale to Firebase:', saleData);
+      
+      // ✅ Save sale to Firebase
+      await addSale(saleData);
+      console.log('✅ Sale saved to Firebase');
+      
+      // Update stock
+      for (const l of cart) {
+        await adjustStock(l.code, -l.qty);
+        await addMovement({
+          id: "MV-" + Date.now() + "-" + l.code,
+          date,
+          code: l.code,
+          name: l.name,
+          unit: l.unit,
+          qty: l.qty,
+          type: "out",
+          cost: l.cost,
+          note: invoice,
+        });
+      }
+      
+      setCommitted(true);
+      toast.success(`Bill ${invoice} saved to Firebase!`);
+    } catch (error) {
+      console.error('❌ Error committing sale:', error);
+      toast.error('Failed to save bill. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openPreview = () => {
@@ -192,8 +223,8 @@ export function BillingScreen() {
     setShowReceipt(true);
   };
 
-  const doPrint = () => {
-    commitSale();
+  const doPrint = async () => {
+    await commitSale();
     const node = document.getElementById("receipt-print");
     if (!node) { toast.error("Receipt not ready"); return; }
     const html = node.outerHTML;
@@ -227,8 +258,8 @@ export function BillingScreen() {
     toast.success("Opening print dialog…");
   };
 
-  const onDownloadHTML = () => {
-    commitSale();
+  const onDownloadHTML = async () => {
+    await commitSale();
     const node = document.getElementById("receipt-print");
     const html = node?.outerHTML ?? "";
     const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${invoice}</title>
@@ -245,9 +276,9 @@ table{width:100%;border-collapse:collapse}
     toast.success("Receipt HTML saved");
   };
 
-  const onDownloadPDF = () => {
+  const onDownloadPDF = async () => {
     if (cart.length === 0) return;
-    commitSale();
+    await commitSale();
     const lineH = 4.5;
     const estLines = 14 + cart.length * 2;
     const pageH = Math.max(120, 30 + estLines * lineH);
@@ -443,6 +474,7 @@ table{width:100%;border-collapse:collapse}
           </h2>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
             {invoice} {committed && <span className="ml-1 text-green-600">• saved</span>}
+            {saving && <span className="ml-1 text-yellow-600">• saving...</span>}
           </p>
         </div>
 
@@ -452,11 +484,10 @@ table{width:100%;border-collapse:collapse}
               <Label className="text-[10px] uppercase text-muted-foreground">Customer</Label>
               <div className="relative">
                 <User className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
+                <CustomerSelect
                   value={customer}
-                  onChange={(e) => setCustomer(e.target.value)}
-                  placeholder="Customer"
-                  className="h-9 pl-8 text-sm"
+                  onChange={setCustomer}
+                  placeholder="Customer (walk-in)"
                 />
               </div>
             </div>
@@ -521,23 +552,23 @@ table{width:100%;border-collapse:collapse}
         <div className="sticky bottom-0 z-10 space-y-2 border-t border-border bg-gradient-to-b from-muted/30 to-muted/10 p-3 backdrop-blur">
           <Button
             className="h-12 w-full gradient-tri border-0 text-base font-bold text-white shadow-glow transition-transform hover:scale-[1.02]"
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || saving}
             onClick={openPreview}
           >
-            <Eye className="mr-2 h-5 w-5" /> Preview & Print
+            {saving ? "Saving..." : <><Eye className="mr-2 h-5 w-5" /> Preview & Print</>}
           </Button>
           <div className="grid grid-cols-3 gap-2">
-            <Button size="sm" variant="secondary" disabled={cart.length === 0} onClick={doPrint} className="transition-transform hover:scale-105">
+            <Button size="sm" variant="secondary" disabled={cart.length === 0 || saving} onClick={doPrint} className="transition-transform hover:scale-105">
               <Printer className="mr-1 h-4 w-4" /> Print
             </Button>
-            <Button size="sm" variant="secondary" disabled={cart.length === 0} onClick={onDownloadPDF} className="transition-transform hover:scale-105">
+            <Button size="sm" variant="secondary" disabled={cart.length === 0 || saving} onClick={onDownloadPDF} className="transition-transform hover:scale-105">
               <FileText className="mr-1 h-4 w-4" /> PDF
             </Button>
-            <Button size="sm" variant="secondary" disabled={cart.length === 0} onClick={onDownloadHTML} className="transition-transform hover:scale-105">
+            <Button size="sm" variant="secondary" disabled={cart.length === 0 || saving} onClick={onDownloadHTML} className="transition-transform hover:scale-105">
               <Download className="mr-1 h-4 w-4" /> HTML
             </Button>
           </div>
-          <Button variant="outline" size="sm" className="w-full" disabled={cart.length === 0} onClick={clear}>
+          <Button variant="outline" size="sm" className="w-full" disabled={cart.length === 0 || saving} onClick={clear}>
             <Trash2 className="mr-2 h-4 w-4" /> {committed ? "New Bill" : "Clear Bill"}
           </Button>
         </div>
@@ -559,13 +590,13 @@ table{width:100%;border-collapse:collapse}
                 customer={customer} cashier={cashier} saleType={saleType} discount={discount} />
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Button onClick={doPrint} className="gradient-tri border-0 text-white">
+              <Button onClick={doPrint} className="gradient-tri border-0 text-white" disabled={saving}>
                 <Printer className="mr-1 h-4 w-4" /> Print
               </Button>
-              <Button variant="secondary" onClick={onDownloadPDF}>
+              <Button variant="secondary" onClick={onDownloadPDF} disabled={saving}>
                 <FileText className="mr-1 h-4 w-4" /> PDF
               </Button>
-              <Button variant="secondary" onClick={onDownloadHTML}>
+              <Button variant="secondary" onClick={onDownloadHTML} disabled={saving}>
                 <Download className="mr-1 h-4 w-4" /> HTML
               </Button>
               <Button variant="outline"
@@ -589,7 +620,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ✅ ShopSettingsDialog - Updated to save to Firebase
+// ShopSettingsDialog
 export function ShopSettingsDialog() {
   const { shop, update } = useShop();
   const [open, setOpen] = useState(false);
