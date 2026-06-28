@@ -93,9 +93,7 @@ export function useItems() {
     }
   }, [firebaseItems]);
 
-  // ✅ Add item - uses code as unique identifier
   const addItem = useCallback(async (item: Item) => {
-    // Prevent concurrent adds
     if (addingRef.current) {
       console.log('⏳ Already adding an item, please wait...');
       return;
@@ -104,21 +102,17 @@ export function useItems() {
     try {
       addingRef.current = true;
       
-      // Check if item with same code exists in current items
       const existing = items.find(i => i.code === item.code);
       
       if (existing && existing.id) {
-        // Update existing item
         console.log(`📝 Updating existing item: ${item.code}`);
         await firebaseUpdateItem(existing.id, item);
       } else {
-        // Check in Firebase directly (race condition)
         const firebaseCheck = firebaseItems?.find((i: any) => i.code === item.code);
         if (firebaseCheck && firebaseCheck.id) {
           console.log(`📝 Updating existing item from Firebase: ${item.code}`);
           await firebaseUpdateItem(firebaseCheck.id, item);
         } else {
-          // Add new item
           console.log(`➕ Adding new item: ${item.code}`);
           await firebaseAddItem(item);
         }
@@ -137,8 +131,6 @@ export function useItems() {
       if (item && item.id) {
         await firebaseDeleteItem(item.id);
         console.log(`✅ Removed item: ${code}`);
-      } else {
-        console.error(`❌ Item not found: ${code}`);
       }
     } catch (error) {
       console.error('❌ Error removing item:', error);
@@ -150,14 +142,40 @@ export function useItems() {
     return items.find(i => i.code === code);
   }, [items]);
 
+  // ✅ FIXED: Adjust stock with proper validation
   const adjustStock = useCallback(async (code: string, delta: number) => {
     try {
       const item = items.find(i => i.code === code);
-      if (item && item.id) {
-        const newStock = (item.stock || 0) + delta;
-        await firebaseUpdateItem(item.id, { ...item, stock: newStock });
-        console.log(`✅ Stock adjusted: ${code}, new stock: ${newStock}`);
+      if (!item) {
+        console.error(`❌ Item not found: ${code}`);
+        return;
       }
+
+      if (!item.id) {
+        console.error(`❌ Item has no ID: ${code}`);
+        return;
+      }
+
+      const currentStock = item.stock || 0;
+      const newStock = currentStock + delta;
+      
+      // ✅ Prevent negative stock
+      if (newStock < 0) {
+        console.warn(`⚠️ Cannot reduce stock below 0 for ${code}. Current: ${currentStock}, Requested: ${delta}`);
+        return;
+      }
+
+      console.log(`📊 Adjusting stock for ${code}: ${currentStock} → ${newStock} (delta: ${delta})`);
+      
+      // ✅ Round to 3 decimal places
+      const roundedStock = Math.round(newStock * 1000) / 1000;
+      
+      await firebaseUpdateItem(item.id, { 
+        ...item, 
+        stock: roundedStock 
+      });
+      
+      console.log(`✅ Stock adjusted: ${code}, new stock: ${roundedStock}`);
     } catch (error) {
       console.error('❌ Error adjusting stock:', error);
       throw error;

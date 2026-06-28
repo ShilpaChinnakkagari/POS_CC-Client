@@ -1,3 +1,4 @@
+// src/components/billing/BillingScreen.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CartLine, formatMoney, isWeighted, SaleType, useItems, useSales, useShop, useStockMovements,
@@ -60,13 +61,37 @@ export function BillingScreen() {
 
   const previewItem = findByCode(code.trim());
 
+  // ✅ ADD CODE WITH STOCK CHECK
   const addCode = (rawCode?: string, rawQty?: string) => {
     const c = (rawCode ?? code).trim();
-    if (!c) return;
+    if (!c) {
+      toast.error("Please enter an item code");
+      return;
+    }
+    
     const item = findByCode(c);
-    if (!item) { toast.error(`No item with code ${c}`); return; }
+    if (!item) {
+      toast.error(`No item with code ${c}`);
+      return;
+    }
+    
     const q = parseFloat((rawQty ?? qty) || "1");
-    if (isNaN(q) || q <= 0) { toast.error("Invalid quantity"); return; }
+    if (isNaN(q) || q <= 0) {
+      toast.error("Invalid quantity");
+      return;
+    }
+    
+    // ✅ STOCK CHECK - Check available stock
+    const currentStock = item.stock || 0;
+    const existingInCart = cart.find((l) => l.code === item.code);
+    const currentCartQty = existingInCart ? existingInCart.qty : 0;
+    const totalRequested = currentCartQty + q;
+    
+    if (totalRequested > currentStock) {
+      toast.error(`Only ${currentStock} ${item.unit}(s) available in stock!`);
+      return;
+    }
+    
     setCart((prev) => {
       const existing = prev.find((l) => l.code === item.code);
       if (existing) {
@@ -79,25 +104,57 @@ export function BillingScreen() {
         price: item.price, qty: q, cost: item.cost, mrp: item.mrp,
       }];
     });
-    setCode(""); setQty("1");
+    setCode("");
+    setQty("1");
     codeRef.current?.focus();
   };
 
   const updateQty = (c: string, q: number) => {
-    if (q <= 0) { setCart((prev) => prev.filter((l) => l.code !== c)); return; }
+    if (q <= 0) {
+      setCart((prev) => prev.filter((l) => l.code !== c));
+      return;
+    }
+    
+    // ✅ Check stock when updating quantity
+    const item = findByCode(c);
+    if (item) {
+      const currentStock = item.stock || 0;
+      if (q > currentStock) {
+        toast.error(`Only ${currentStock} ${item.unit}(s) available in stock!`);
+        return;
+      }
+    }
+    
     setCart((prev) => prev.map((l) => (l.code === c ? { ...l, qty: +q.toFixed(3) } : l)));
   };
 
   const remove = (c: string) => setCart((prev) => prev.filter((l) => l.code !== c));
   const clear = () => {
-    setCart([]); setCommitted(false);
+    setCart([]);
+    setCommitted(false);
     setInvoice("INV-" + Date.now().toString().slice(-6));
     setDiscountInput("0");
     setCustomer("Customer");
   };
 
+  // ✅ COMMIT SALE WITH STOCK CHECK
   const commitSale = () => {
     if (committed || cart.length === 0) return;
+    
+    // ✅ CHECK STOCK BEFORE COMMITTING
+    for (const line of cart) {
+      const item = findByCode(line.code);
+      if (!item) {
+        toast.error(`Item ${line.code} not found!`);
+        return;
+      }
+      const currentStock = item.stock || 0;
+      if (line.qty > currentStock) {
+        toast.error(`Not enough stock for ${item.name}! Available: ${currentStock} ${item.unit}(s)`);
+        return;
+      }
+    }
+    
     const date = new Date().toISOString();
     addSale({
       invoice, date, lines: cart, subtotal, discount, tax, total, profit,
@@ -114,14 +171,18 @@ export function BillingScreen() {
       });
     });
     setCommitted(true);
+    toast.success(`Bill ${invoice} saved!`);
   };
 
   const openPreview = () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0) {
+      toast.error("Cart is empty");
+      return;
+    }
     setShowReceipt(true);
   };
 
-  /** Print via hidden iframe so it works without the dialog and prints only the receipt */
+  /** Print via hidden iframe */
   const doPrint = () => {
     commitSale();
     const node = document.getElementById("receipt-print");
@@ -175,7 +236,7 @@ table{width:100%;border-collapse:collapse}
     toast.success("Receipt HTML saved");
   };
 
-  /** Generate a clean text-based PDF with totals & GST */
+  /** Generate a clean text-based PDF */
   const onDownloadPDF = () => {
     if (cart.length === 0) return;
     commitSale();
@@ -473,7 +534,7 @@ table{width:100%;border-collapse:collapse}
           </Button>
         </div>
 
-        {/* Offscreen receipt so Print/PDF work even when preview is closed */}
+        {/* Offscreen receipt */}
         <div aria-hidden className="pointer-events-none fixed left-[-10000px] top-0 opacity-0">
           {cart.length > 0 && (
             <Receipt shop={shop} cart={cart} invoiceNo={invoice} date={new Date()}
