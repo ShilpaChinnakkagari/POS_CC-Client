@@ -13,11 +13,11 @@ import {
 } from "@/components/ui/select";
 import {
   Download, FileText, Minus, Plus, Printer, Trash2, X, Receipt as ReceiptIcon,
-  User, BadgeIndianRupee, Eye,
+  User, BadgeIndianRupee, Eye, Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import jsPDF from "jspdf";
 
@@ -134,14 +134,12 @@ export function BillingScreen() {
     setCustomer("Customer");
   };
 
-  // ✅ FIXED: Commit sale with proper data
   const commitSale = () => {
     if (committed || cart.length === 0) {
       console.log('⚠️ Sale already committed or cart empty');
       return;
     }
     
-    // Check stock
     for (const line of cart) {
       const item = findByCode(line.code);
       if (!item) {
@@ -157,7 +155,6 @@ export function BillingScreen() {
     
     const date = new Date().toISOString();
     
-    // ✅ Save sale with all data
     const saleData = {
       invoice,
       date,
@@ -175,7 +172,6 @@ export function BillingScreen() {
     console.log('💾 Committing sale:', saleData);
     addSale(saleData);
     
-    // Update stock
     cart.forEach((l) => {
       adjustStock(l.code, -l.qty);
       addMovement({
@@ -590,5 +586,86 @@ function Row({ label, value }: { label: string; value: string }) {
       <span className="text-muted-foreground">{label}</span>
       <span className="font-mono">{value}</span>
     </div>
+  );
+}
+
+// ✅ ShopSettingsDialog - Updated to save to Firebase
+export function ShopSettingsDialog() {
+  const { shop, update } = useShop();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(shop);
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) setDraft(shop);
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="transition-all hover:border-primary hover:bg-primary/10 hover:text-primary">
+          <Settings className="mr-2 h-4 w-4" /> Shop Settings
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Shop Settings</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Shop name</Label>
+            <Input 
+              value={draft.name} 
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })} 
+            />
+          </div>
+          <div>
+            <Label>Address</Label>
+            <Input 
+              value={draft.address} 
+              onChange={(e) => setDraft({ ...draft, address: e.target.value })} 
+            />
+          </div>
+          <div>
+            <Label>Phone</Label>
+            <Input 
+              value={draft.phone} 
+              onChange={(e) => setDraft({ ...draft, phone: e.target.value })} 
+            />
+          </div>
+          <div>
+            <Label>Tax %</Label>
+            <Input
+              type="number"
+              value={draft.taxPercent}
+              onChange={(e) => setDraft({ ...draft, taxPercent: parseFloat(e.target.value) || 0 })}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button
+            onClick={async () => {
+              setSaving(true);
+              try {
+                await update(draft);
+                toast.success("Settings saved to Firebase!");
+                setOpen(false);
+              } catch (error) {
+                console.error("Error saving settings:", error);
+                toast.error("Failed to save settings");
+              } finally {
+                setSaving(false);
+              }
+            }}
+            disabled={saving}
+          >
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
