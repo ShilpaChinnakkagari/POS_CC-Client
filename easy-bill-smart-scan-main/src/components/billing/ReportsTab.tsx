@@ -44,7 +44,8 @@ export function ReportsTab() {
           date: m.date,
           items: [],
           total: 0,
-          profit: 0
+          profit: 0,
+          isReturn: false,
         });
       }
       const sale = invoiceMap.get(invoice);
@@ -265,11 +266,12 @@ function SalesTable({ sales }: { sales: any[] }) {
             <TableHead className="text-right">Items</TableHead>
             <TableHead className="text-right">Total</TableHead>
             <TableHead className="text-right">Profit</TableHead>
+            <TableHead className="text-right">Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {sales.length === 0 && (
-            <TableRow><TableCell colSpan={5} className="py-6 text-center text-muted-foreground">No sales.</TableCell></TableRow>
+            <TableRow><TableCell colSpan={6} className="py-6 text-center text-muted-foreground">No sales.</TableCell></TableRow>
           )}
           {sales.map((s) => (
             <TableRow key={s.invoice}>
@@ -278,6 +280,13 @@ function SalesTable({ sales }: { sales: any[] }) {
               <TableCell className="text-right">{s.items?.length || 0}</TableCell>
               <TableCell className="text-right font-mono">{formatMoney(s.total)}</TableCell>
               <TableCell className="text-right font-mono text-green-600">{formatMoney(s.profit)}</TableCell>
+              <TableCell className="text-right">
+                {s.isReturn ? (
+                  <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded">Return</span>
+                ) : (
+                  <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded">Sale</span>
+                )}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
