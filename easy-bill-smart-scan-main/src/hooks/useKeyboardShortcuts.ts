@@ -30,75 +30,93 @@ export function useKeyboardShortcuts({
     (e: KeyboardEvent) => {
       // ✅ Don't trigger shortcuts if typing in input
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        // Allow Enter in inputs
-        if (e.key === 'Enter' && onAddItem) {
-          // Let the input handle Enter
-          return;
-        }
-        // For other shortcuts, check if Ctrl/Cmd is pressed
-        if (!e.ctrlKey && !e.metaKey) return;
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
+      
+      // ✅ Allow Enter in inputs
+      if (isInput && e.key === 'Enter' && onAddItem) {
+        return;
       }
 
-      // Ctrl+N or Cmd+N - New Bill
-      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+      // ⚠️ For other shortcuts, only work if NOT in input (unless with Ctrl/Cmd)
+      if (isInput && !e.ctrlKey && !e.metaKey) {
+        return;
+      }
+
+      // ✅ Alt + N - New Bill (instead of Ctrl+N which opens new tab)
+      if (e.altKey && e.key === 'n') {
         e.preventDefault();
+        e.stopPropagation();
         if (onNewBill) onNewBill();
         return;
       }
 
-      // Ctrl+P or Cmd+P - Print
-      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+      // ✅ Alt + S - Save/Print (instead of Ctrl+S which saves page)
+      if (e.altKey && e.key === 's') {
         e.preventDefault();
-        if (onPrint) onPrint();
-        return;
-      }
-
-      // Ctrl+S or Cmd+S - Save/Print
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
+        e.stopPropagation();
         if (onSave) onSave();
         return;
       }
 
-      // Ctrl+F or Cmd+F - Focus Search/Code
+      // ✅ Alt + P - Print (instead of Ctrl+P which opens print dialog)
+      if (e.altKey && e.key === 'p') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onPrint) onPrint();
+        return;
+      }
+
+      // ✅ Ctrl + F - Focus Code (works in input)
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
+        e.stopPropagation();
         if (onFocusCode) onFocusCode();
         return;
       }
 
-      // Ctrl+Shift+F - Focus Customer
+      // ✅ Ctrl + Shift + F - Focus Customer
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'F') {
         e.preventDefault();
+        e.stopPropagation();
         if (onFocusCustomer) onFocusCustomer();
         return;
       }
 
-      // Escape - Clear/Cancel
-      if (e.key === 'Escape') {
-        if (onCancel) onCancel();
-        return;
-      }
-
-      // F1 - Preview
-      if (e.key === 'F1') {
+      // ✅ Alt + C - Clear Cart
+      if (e.altKey && e.key === 'c') {
         e.preventDefault();
-        if (onPreview) onPreview();
-        return;
-      }
-
-      // Delete/Backspace - Clear cart
-      if ((e.key === 'Delete' || e.key === 'Backspace') && e.ctrlKey) {
-        e.preventDefault();
+        e.stopPropagation();
         if (onClear) onClear();
         return;
       }
 
-      // F2 - Search/Clear
-      if (e.key === 'F2') {
+      // ✅ Ctrl + Delete - Clear Cart (alternative)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'Delete' || e.key === 'Backspace')) {
         e.preventDefault();
+        e.stopPropagation();
+        if (onClear) onClear();
+        return;
+      }
+
+      // ✅ Alt + V - Preview (instead of F1 which conflicts with help)
+      if (e.altKey && e.key === 'v') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onPreview) onPreview();
+        return;
+      }
+
+      // ✅ Alt + F - Focus Search (instead of F2)
+      if (e.altKey && e.key === 'f' && !e.ctrlKey) {
+        e.preventDefault();
+        e.stopPropagation();
         if (onSearch) onSearch();
+        return;
+      }
+
+      // ✅ Escape - Cancel (works anywhere)
+      if (e.key === 'Escape') {
+        if (onCancel) onCancel();
         return;
       }
     },
@@ -106,9 +124,9 @@ export function useKeyboardShortcuts({
   );
 
   useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, true);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [handleKeyDown]);
 }

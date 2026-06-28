@@ -16,13 +16,14 @@ interface Shortcut {
 }
 
 const shortcuts: Shortcut[] = [
-  { keys: "Ctrl + N", description: "New Bill" },
-  { keys: "Ctrl + S", description: "Save & Print Bill" },
-  { keys: "Ctrl + P", description: "Print Receipt" },
+  { keys: "Alt + N", description: "New Bill" },
+  { keys: "Alt + S", description: "Save & Print Bill" },
+  { keys: "Alt + P", description: "Print Receipt" },
   { keys: "Ctrl + F", description: "Focus Item Code" },
   { keys: "Ctrl + Shift + F", description: "Focus Customer Field" },
-  { keys: "F1", description: "Preview Bill" },
-  { keys: "F2", description: "Search Items" },
+  { keys: "Alt + V", description: "Preview Bill" },
+  { keys: "Alt + F", description: "Search Items" },
+  { keys: "Alt + C", description: "Clear Cart" },
   { keys: "Ctrl + Delete", description: "Clear Cart" },
   { keys: "Esc", description: "Cancel / Clear" },
   { keys: "Enter", description: "Add Item to Cart" },
@@ -63,7 +64,7 @@ export function KeyboardShortcutsHelp() {
           ))}
         </div>
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Shortcuts work only when not typing in input fields
+          Shortcuts work even when typing in input fields
         </p>
       </DialogContent>
     </Dialog>
